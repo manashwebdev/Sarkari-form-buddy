@@ -4,22 +4,48 @@ Input may be Hindi, English or mixed. Reply with ONLY valid JSON, no markdown, i
 {"documentType":string,"summaryHindi":string (3-4 simple sentences),"whatYouNeedToDo":string[],"documentsRequired":[{"name":string,"note":string}],"stepsHindi":[{"step":number,"title":string,"detail":string}],"importantDates":[{"label":string,"date":string}],"feesOrCharges":string|null,"whereToSubmit":string|null,"warnings":string[],"confidence":"high"|"medium"|"low","unclearParts":string[]}`;
 
 export async function explain(text: string): Promise<unknown> {
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      "x-api-key": process.env.ANTHROPIC_API_KEY ?? "",
-      "anthropic-version": "2023-06-01",
-    },
-    body: JSON.stringify({
-      model: process.env.ANTHROPIC_MODEL ?? "claude-sonnet-5-5",
-      max_tokens: 2000,
-      system: SYSTEM,
-      messages: [{ role: "user", content: `Document text (from OCR):\n\n${text.slice(0, 12000)}` }],
-    }),
-  });
-  if (!res.ok) throw new Error("llm");
+  const apiKey = process.env.GEMINI_API_KEY ?? "";
+
+  const res = await fetch(
+    "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent",
+    {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-goog-api-key": apiKey,
+      },
+      body: JSON.stringify({
+        systemInstruction: {
+          parts: [{ text: SYSTEM }],
+        },
+        contents: [
+          {
+            role: "user",
+            parts: [
+              {
+                text: `Document text (from OCR):\n\n${text.slice(0, 12000)}`,
+              },
+            ],
+          },
+        ],
+        generationConfig: {
+          maxOutputTokens: 2000,
+          responseMimeType: "application/json",
+        },
+      }),
+    }
+  );
+
+  if (!res.ok) {
+    throw new Error("llm");
+  }
+
   const data = await res.json();
-  const raw: string = data.content?.map((c: { text?: string }) => c.text ?? "").join("") ?? "";
-  return JSON.parse(raw.replace(/```json|```/g, "").trim());
+
+  const raw =
+    data.candidates?.[0]?.content?.parts
+      ?.map((part: { text?: string }) => part.text ?? "")
+      .join("") ?? "";
+
+  return JSON.parse(raw.trim());
 }
